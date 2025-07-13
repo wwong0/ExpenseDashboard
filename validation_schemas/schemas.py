@@ -1,33 +1,32 @@
-# C:/Users/William/PycharmProjects/ExpenseDashboard/validation_schemas/schemas.py
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional
 import datetime
-
 
 # --- Input Schemas ---
 # These schemas are used to validate incoming request data.
 
 class CreateExpenseSchema(BaseModel):
     """Schema for validating data when creating a new expense."""
+    name : str
     amount: float
     description: Optional[str] = None
     category_id: Optional[int] = None
     active_status: bool = True
-    date: datetime.date = datetime.date.today()
-    tag_ids: List[int] = []
-
+    date: datetime.date = Field(default_factory=datetime.date.today)
+    tag_ids: set[int] = Field(default_factory=set)
 
 class UpdateExpenseSchema(BaseModel):
     """
     Schema for validating data when updating an expense.
     All fields are optional, allowing for partial updates.
     """
+    name : Optional[str] = None
     amount: Optional[float] = None
-    description: Optional[str] = None
-    category_id: Optional[int] = None
+    description: Optional[str] = Field(default=None)
+    category_id: Optional[int] = Field(default=None)
     active_status: Optional[bool] = None
     date: Optional[datetime.date] = None
-    tag_ids: Optional[List[int]] = None
+    tag_ids: Optional[set[int]] = None
 
 
 class AuthSchema(BaseModel):
@@ -54,6 +53,7 @@ class CategoryResponseSchema(BaseModel):
 class ExpenseResponseSchema(BaseModel):
     """Schema for serializing Expense model data, including nested objects."""
     id: int
+    name: str
     amount: float
     description: Optional[str]
     date: datetime.date

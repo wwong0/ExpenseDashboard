@@ -22,8 +22,9 @@ class Expense(db.Model):
     """Represents a single expense record."""
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    date = db.Column(db.Date, nullable=False)
+    name = db.Column(db.String(50), nullable=True)
     amount = db.Column(db.Float, nullable=False)
+    date = db.Column(db.Date, nullable=False)
     description = db.Column(db.Text, nullable=True)
     active_status = db.Column(db.Boolean, nullable=False, default=True)
 

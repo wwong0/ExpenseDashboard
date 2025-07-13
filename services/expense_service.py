@@ -3,6 +3,23 @@ from models import db, Expense, Category, Tag
 from validation_schemas.schemas import CreateExpenseSchema, UpdateExpenseSchema
 from services import NotFoundError
 
+def get_expense_by_id(user_id: int, expense_id: int) -> Expense:
+    """Retrieves a single expense by its ID.
+
+    Args:
+        user_id: The ID of the user who owns the expense.
+        expense_id: The ID of the expense to retrieve.
+
+    Returns:
+        The Expense object if found.
+
+    Raises:
+        NotFoundError: If no expense with the given ID is found for the user.
+    """
+    expense = Expense.query.filter_by(user_id=user_id, id=expense_id).first()
+    if not expense:
+        raise NotFoundError(f'Expense with id {expense_id} under user_id {user_id} not found')
+    return expense
 
 def get_all_expenses(user_id: int) -> list[Expense]:
     """Retrieves all expenses for a given user.
@@ -15,6 +32,8 @@ def get_all_expenses(user_id: int) -> list[Expense]:
     Returns:
         A list of the user's Expense objects.
     """
+
+    #TODO: this should be paginated
     return Expense.query.options(
         selectinload(Expense.category),
         selectinload(Expense.tags)
@@ -45,24 +64,6 @@ def get_all_tags(user_id: int) -> list[Tag]:
     return Tag.query.filter_by(user_id=user_id).all()
 
 
-def get_expense_by_id(user_id: int, expense_id: int) -> Expense:
-    """Retrieves a single expense by its ID.
-
-    Args:
-        user_id: The ID of the user who owns the expense.
-        expense_id: The ID of the expense to retrieve.
-
-    Returns:
-        The Expense object if found.
-
-    Raises:
-        NotFoundError: If no expense with the given ID is found for the user.
-    """
-    expense = Expense.query.filter_by(user_id=user_id, id=expense_id).first()
-    if not expense:
-        raise NotFoundError(f'Expense with id {expense_id} not found')
-    return expense
-
 
 def get_category_by_id(user_id: int, category_id: int | None) -> Category | None:
     """Retrieves a single category by its ID, ensuring it belongs to the user.
@@ -86,29 +87,28 @@ def get_category_by_id(user_id: int, category_id: int | None) -> Category | None
     return category
 
 
-def get_tags_by_id(user_id: int, tag_ids: list[int]) -> list[Tag]:
+def get_tags_by_id(user_id: int, tag_ids: set[int]) -> list[Tag]:
     """Retrieves a list of tags by their IDs, ensuring they belong to the user.
 
     Args:
         user_id: The ID of the user who owns the tags.
-        tag_ids: A list of tag IDs to retrieve.
+        tag_ids: A set of tag IDs to retrieve.
 
     Returns:
         A list of Tag objects.
 
     Raises:
-        ValueError: If any of the provided tag IDs are invalid or do not
-            belong to the user.
+        NotFoundError: If any of the provided tag IDs are not found because they are
+         invalid or do not belong to the user.
     """
     if not tag_ids:
         return []
-    unique_tag_ids = set(tag_ids)
-    tags = Tag.query.filter(Tag.id.in_(unique_tag_ids), Tag.user_id == user_id).all()
+    tags = Tag.query.filter(Tag.id.in_(tag_ids), Tag.user_id == user_id).all()
 
-    if len(tags) != len(unique_tag_ids):
+    if len(tags) != len(tag_ids):
         fetched_ids = {tag.id for tag in tags}
-        invalid_ids = unique_tag_ids - fetched_ids
-        raise ValueError(f"One or more invalid tag ids: {invalid_ids}")
+        invalid_ids = tag_ids - fetched_ids
+        raise NotFoundError(f"One or more invalid tag ids: {sorted(list(invalid_ids))}")
     return tags
 
 
@@ -126,6 +126,7 @@ def create_expense(user_id: int, data: CreateExpenseSchema) -> Expense:
     tags = get_tags_by_id(user_id, data.tag_ids)
 
     new_expense = Expense(
+        name = data.name,
         user_id=user_id,
         amount=data.amount,
         description=data.description,
