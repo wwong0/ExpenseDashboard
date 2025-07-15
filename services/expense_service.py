@@ -1,7 +1,34 @@
 from sqlalchemy.orm import selectinload
+from flask_sqlalchemy.pagination import Pagination
+
 from models import db, Expense, Category, Tag
 from validation_schemas.schemas import CreateExpenseSchema, UpdateExpenseSchema
 from services import NotFoundError
+
+def get_all_expenses(user_id: int, page: int = 1, per_page: int = 20) -> Pagination:
+    """Retrieves a paginated list of expenses for a given user.
+
+    Eagerly loads related categories and tags to prevent N+1 query problems.
+
+    Args:
+        user_id: The ID of the user whose expenses are to be retrieved.
+        page: The page number to retrieve.
+        per_page: The number of items to retrieve per page.
+
+    Returns:
+        A Pagination object containing the user's Expense objects for the
+        requested page, along with pagination metadata.
+    """
+
+    query = Expense.query.options(
+        selectinload(Expense.category),
+        selectinload(Expense.tags)
+    ).filter_by(user_id=user_id)
+
+    query = query.order_by(Expense.date.desc(), Expense.id.desc())
+
+    return query.paginate(page=page, per_page=per_page, error_out=False)
+
 
 def get_expense_by_id(user_id: int, expense_id: int) -> Expense:
     """Retrieves a single expense by its ID.
@@ -16,56 +43,33 @@ def get_expense_by_id(user_id: int, expense_id: int) -> Expense:
     Raises:
         NotFoundError: If no expense with the given ID is found for the user.
     """
-    expense = Expense.query.filter_by(user_id=user_id, id=expense_id).first()
+    expense = Expense.query.options(
+        selectinload(Expense.category),
+        selectinload(Expense.tags)
+    ).filter_by(user_id=user_id, id=expense_id).first()
     if not expense:
         raise NotFoundError(f'Expense with id {expense_id} under user_id {user_id} not found')
     return expense
 
-def get_all_expenses(user_id: int) -> list[Expense]:
-    """Retrieves all expenses for a given user.
-
-    Eagerly loads related categories and tags to prevent N+1 query problems.
-
-    Args:
-        user_id: The ID of the user whose expenses are to be retrieved.
-
-    Returns:
-        A list of the user's Expense objects.
-    """
-
-    #TODO: this should be paginated
-    return Expense.query.options(
-        selectinload(Expense.category),
-        selectinload(Expense.tags)
-    ).filter_by(user_id=user_id).all()
-
-
-def get_all_categories(user_id: int) -> list[Category]:
-    """Retrieves all categories for a given user.
+def get_all_categories(user_id: int, page: int = 1, per_page: int = 20) -> Pagination:
+    """Retrieves a paginated list of categories for a given user.
 
     Args:
         user_id: The ID of the user whose categories are to be retrieved.
+        page: The page number to retrieve.
+        per_page: The number of items to retrieve per page.
 
     Returns:
-        A list of the user's Category objects.
+        A Pagination object containing the user's Category objects for the
+        requested page, along with pagination metadata.
     """
-    return Category.query.filter_by(user_id=user_id).all()
+    query = Category.query.filter_by(user_id=user_id)
 
+    query = query.order_by(Category.name)
 
-def get_all_tags(user_id: int) -> list[Tag]:
-    """Retrieves all tags for a given user.
+    return query.paginate(page=page, per_page=per_page, error_out=False)
 
-    Args:
-        user_id: The ID of the user whose tags are to be retrieved.
-
-    Returns:
-        A list of the user's Tag objects.
-    """
-    return Tag.query.filter_by(user_id=user_id).all()
-
-
-
-def get_category_by_id(user_id: int, category_id: int | None) -> Category | None:
+def get_category_by_id(user_id: int, category_id: int) -> Category | None:
     """Retrieves a single category by its ID, ensuring it belongs to the user.
 
     Args:
@@ -86,8 +90,38 @@ def get_category_by_id(user_id: int, category_id: int | None) -> Category | None
         raise NotFoundError(f'Category with id {category_id} not found')
     return category
 
+def get_all_tags(user_id: int, page: int = 1, per_page: int = 20) -> Pagination:
+    """Retrieves all tags for a given user.
 
-def get_tags_by_id(user_id: int, tag_ids: set[int]) -> list[Tag]:
+    Args:
+        user_id: The ID of the user whose tags are to be retrieved.
+        page: The page number to retrieve.
+        per_page: The number of items to retrieve per page.
+
+    Returns:
+        A Pagination object containing the user's Tag objects for the
+        requested page, along with pagination metadata.
+    """
+    query = Tag.query.filter_by(user_id=user_id)
+
+    query = query.order_by(Tag.name)
+
+    return query.paginate(page=page, per_page=per_page, error_out=False)
+
+def validate_tags(user_id : int, tag_ids : set[int]):
+    validation_query = Tag.query.with_entities(Tag.id).filter(
+        Tag.id.in_(tag_ids),
+        Tag.user_id == user_id
+    )
+    fetched_ids = {row.id for row in validation_query.all()}
+    if len(fetched_ids) != len(tag_ids):
+        invalid_ids = tag_ids - fetched_ids
+        raise NotFoundError(f"One or more invalid tag ids: {sorted(list(invalid_ids))}")
+
+    return fetched_ids
+
+
+def get_tags_by_ids(user_id: int, tag_ids: set[int]) -> list[Tag]:
     """Retrieves a list of tags by their IDs, ensuring they belong to the user.
 
     Args:
@@ -98,19 +132,36 @@ def get_tags_by_id(user_id: int, tag_ids: set[int]) -> list[Tag]:
         A list of Tag objects.
 
     Raises:
-        NotFoundError: If any of the provided tag IDs are not found because they are
-         invalid or do not belong to the user.
+        NotFoundError: If any of the provided tag IDs are invalid or do not
+         belong to the user.
     """
     if not tag_ids:
         return []
-    tags = Tag.query.filter(Tag.id.in_(tag_ids), Tag.user_id == user_id).all()
 
-    if len(tags) != len(tag_ids):
-        fetched_ids = {tag.id for tag in tags}
-        invalid_ids = tag_ids - fetched_ids
-        raise NotFoundError(f"One or more invalid tag ids: {sorted(list(invalid_ids))}")
-    return tags
+    fetched_ids = validate_tags(user_id, tag_ids)
 
+    query = Tag.query.filter(Tag.id.in_(fetched_ids)).order_by(Tag.name)
+    return query.all()
+
+def get_tag_by_id(user_id: int, tag_id: int) -> Tag:
+    """Retrieves a single tag by its ID, ensuring it belongs to the user.
+
+    Args:
+        user_id: The ID of the user who owns the category.
+        tag_id: The ID of the category to retrieve, or None.
+
+    Returns:
+        The Tag object if found, otherwise None.
+
+    Raises:
+        NotFoundError: If a tag_id is provided but no matching category
+            is found for the user.
+    """
+
+    tag = Tag.query.filter_by(user_id=user_id, id=tag_id).first()
+    if not tag:
+        raise NotFoundError(f'Tag with id {tag_id} not found')
+    return tag
 
 def create_expense(user_id: int, data: CreateExpenseSchema) -> Expense:
     """Creates a new expense record in the database.
@@ -123,7 +174,7 @@ def create_expense(user_id: int, data: CreateExpenseSchema) -> Expense:
         The newly created Expense object.
     """
     category = get_category_by_id(user_id, data.category_id)
-    tags = get_tags_by_id(user_id, data.tag_ids)
+    tags = get_tags_by_ids(user_id, data.tag_ids)
 
     new_expense = Expense(
         name = data.name,
@@ -141,7 +192,6 @@ def create_expense(user_id: int, data: CreateExpenseSchema) -> Expense:
 
     return new_expense
 
-
 def update_expense(user_id: int, expense_id: int, data: UpdateExpenseSchema) -> Expense:
     """Updates an existing expense record.
 
@@ -156,12 +206,15 @@ def update_expense(user_id: int, expense_id: int, data: UpdateExpenseSchema) -> 
     expense = get_expense_by_id(user_id, expense_id)
     update_data = data.model_dump(exclude_unset=True)
 
+    if 'category_id' in update_data:
+        expense.category = get_category_by_id(user_id, update_data['category_id'])
+        update_data.pop('category_id')
+
+    if 'tag_ids' in update_data:
+        expense.tags = get_tags_by_ids(user_id, update_data['tag_ids'])
+        update_data.pop('tag_ids')
+
     for key, value in update_data.items():
-        if key == 'category_id':
-            expense.category = get_category_by_id(user_id, value)
-        elif key == 'tag_ids':
-            expense.tags = get_tags_by_id(user_id, value)
-        else:
             setattr(expense, key, value)
 
     db.session.commit()

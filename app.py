@@ -21,20 +21,13 @@ def create_app(config_class = Config):
         The configured Flask application instance.
     """
     app = Flask(__name__)
-    # Load configuration from the specified config object
     app.config.from_object(config_class)
 
-    # Initialize extensions
     jwt = JWTManager(app)
     db.init_app(app)
 
-    # Register blueprints to organize routes
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(expense_bp, url_prefix='/api')
-
-    # --- Custom Error Handlers ---
-    # These handlers catch specific exceptions raised from anywhere in the app
-    # and return a standardized JSON error response.
 
     @app.errorhandler(NotFoundError)
     def handle_not_found(error):
@@ -43,12 +36,6 @@ def create_app(config_class = Config):
         response.status_code = 404
         return response
 
-    @app.errorhandler(ValueError)
-    def handle_value_error(error):
-        """Handles ValueError for things like invalid IDs from the service layer."""
-        response = jsonify({"error": str(error)})
-        response.status_code = 400
-        return response
 
     @app.errorhandler(UserAlreadyExistsError)
     def handle_user_already_exists(error):

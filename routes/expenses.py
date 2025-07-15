@@ -1,6 +1,7 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from flask_pydantic import validate
+
 
 from validation_schemas.schemas import CreateExpenseSchema, UpdateExpenseSchema, ExpenseResponseSchema, \
     CategoryResponseSchema, TagResponseSchema
@@ -8,6 +9,20 @@ from services import expense_service
 
 expense_bp = Blueprint('expenses', __name__)
 
+def pagination_to_response_data(pag, schema) -> dict:
+    item_data = [schema.model_validate(e).model_dump() for e in pag.items]
+
+    response_data = {
+        "items": item_data,
+        "total": pag.total,
+        "pages": pag.pages,
+        "current_page": pag.page,
+        "per_page": pag.per_page,
+        "has_next": pag.has_next,
+        "has_prev": pag.has_prev
+    }
+
+    return response_data
 
 @expense_bp.route('/expenses', methods=['GET'])
 @jwt_required()
@@ -15,13 +30,17 @@ def get_all_expenses():
     """Retrieves all expenses for the authenticated user.
 
     Returns:
-        A JSON list of the user's expenses and a 200 OK status.
+        A JSON object of the user's expenses and pagination metadata.
     """
     user_id = get_jwt_identity()
-    expenses = expense_service.get_all_expenses(user_id)
-    response_data = [ExpenseResponseSchema.model_validate(e).model_dump() for e in expenses]
-    return jsonify(response_data), 200
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
 
+    pagination = expense_service.get_all_expenses(user_id, page=page, per_page=per_page)
+
+    response_data = pagination_to_response_data(pagination, ExpenseResponseSchema)
+
+    return jsonify(response_data), 200
 
 @expense_bp.route('/expenses/<int:expense_id>', methods=['GET'])
 @jwt_required()
@@ -42,33 +61,89 @@ def get_expense(expense_id: int):
     response_data = ExpenseResponseSchema.model_validate(expense)
     return response_data.model_dump(), 200
 
-
-@expense_bp.route('/expense_categories', methods=['GET'])
+@expense_bp.route('/categories', methods=['GET'])
 @jwt_required()
-def get_categories():
+def get_all_categories():
     """Retrieves all expense categories for the authenticated user.
 
     Returns:
-        A JSON list of the user's categories and a 200 OK status.
+        A JSON object of the user's categories and pagination metadata.
     """
     user_id = get_jwt_identity()
-    categories = expense_service.get_all_categories(user_id)
-    response_data = [CategoryResponseSchema.model_validate(c).model_dump() for c in categories]
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+
+    pagination = expense_service.get_all_categories(user_id, page=page, per_page=per_page)
+
+    response_data = pagination_to_response_data(pagination, CategoryResponseSchema)
+
     return jsonify(response_data), 200
 
+@expense_bp.route('/categories/<int:category_id>', methods=['GET'])
+@jwt_required()
+def get_category(category_id: int):
+    """Retrieves a single category by its ID.
 
-@expense_bp.route('/expense_tags', methods=['GET'])
+    The category must belong to the authenticated user.
+
+    Args:
+        category_id: The unique identifier for the expense.
+
+    Returns:
+        A JSON object of the category and a 200 OK status,
+        or a 404 Not Found if the category does not exist.
+    """
+    user_id = get_jwt_identity()
+    category = expense_service.get_category_by_id(user_id, category_id)
+    response_data = CategoryResponseSchema.model_validate(category)
+    return response_data.model_dump(), 200
+
+@expense_bp.route('/tags', methods=['GET'])
 @jwt_required()
 def get_tags():
     """Retrieves all expense tags for the authenticated user.
 
     Returns:
-        A JSON list of the user's tags and a 200 OK status.
+        A JSON object of the user's tags and pagination metadata.
     """
     user_id = get_jwt_identity()
-    tags = expense_service.get_all_tags(user_id)
-    response_data = [TagResponseSchema.model_validate(t).model_dump() for t in tags]
-    return jsonify(response_data), 200
+    tag_ids_str = request.args.get('ids')
+
+
+    if tag_ids_str:
+        try:
+            tag_ids = {int(id_str) for id_str in tag_ids_str.split(',')}
+        except ValueError as e:
+            return jsonify({"error": "Invalid tag IDs format. Must be a comma-separated list of integers."}), 400
+        tags = expense_service.get_tags_by_ids(user_id=user_id, tag_ids=tag_ids)
+        response_data = [TagResponseSchema.model_validate(t).model_dump() for t in tags]
+        return jsonify(response_data), 200
+    else:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        pagination = expense_service.get_all_tags(user_id=user_id, page=page, per_page=per_page)
+        response_data = pagination_to_response_data(pagination, TagResponseSchema)
+        return jsonify(response_data), 200
+
+
+@expense_bp.route('/tags/<int:tag_id>', methods=['GET'])
+@jwt_required()
+def get_tag(tag_id: int):
+    """Retrieves a single tag by its ID.
+
+    The tag must belong to the authenticated user.
+
+    Args:
+        tag_id: The unique identifier for the expense.
+
+    Returns:
+        A JSON object of the tag and a 200 OK status,
+        or a 404 Not Found if the tag does not exist.
+    """
+    user_id = get_jwt_identity()
+    tag = expense_service.get_tag_by_id(user_id, tag_id)
+    response_data = TagResponseSchema.model_validate(tag)
+    return response_data.model_dump(), 200
 
 
 @expense_bp.route('/expenses', methods=['POST'])

@@ -8,6 +8,116 @@ from tests.conftest import seeded_test_db
 from validation_schemas.schemas import CreateExpenseSchema, UpdateExpenseSchema
 from models import User, Expense, Category, Tag
 
+def test_get_all_expenses(seeded_test_db):
+    """
+    GIVEN a user with multiple expenses in the database
+    WHEN the get_all_expenses service is called with specific pagination params
+    THEN it should return a Pagination object with the correct items and metadata
+         for that page, scoped to the correct user.
+    """
+    # GIVEN
+    user1_id = seeded_test_db['user1'].id
+
+    user1_expected_expenses = {
+        seeded_test_db['user1_expense1'],
+        seeded_test_db['user1_expense2']
+    }
+
+    # WHEN:
+    pagination_page1 = expense_service.get_all_expenses(
+        user_id=user1_id,
+        page=1,
+        per_page=1
+    )
+
+    pagination_page2 = expense_service.get_all_expenses(
+        user_id=user1_id,
+        page=2,
+        per_page=1
+    )
+
+    # THEN: Verify the metadata and items
+
+    assert pagination_page1.total == 2      # Correct total count for user1
+    assert pagination_page1.pages == 2      # Correct number of total pages
+    assert pagination_page1.page == 1       # Correct current page number
+    assert pagination_page1.has_next is True
+    assert pagination_page1.has_prev is False
+    assert len(pagination_page1.items) == 1 # Correct number of items on this page
+
+    assert pagination_page2.page == 2
+    assert pagination_page2.has_next is False
+    assert pagination_page2.has_prev is True
+    assert len(pagination_page2.items) == 1
+
+    all_retrieved_expenses = set(pagination_page1.items + pagination_page2.items)
+    assert all_retrieved_expenses == user1_expected_expenses
+
+def test_get_all_categories(seeded_test_db):
+    """
+    GIVEN a valid user id
+    WHEN the get_all_categories service is called
+    THEN a pagination object with all categories belonging to that user should be returned
+    """
+    # GIVEN
+    user_id = seeded_test_db['user1'].id
+
+    # WHEN
+    pagination = expense_service.get_all_categories(user_id=user_id, page=1, per_page=10)
+
+    # THEN
+    assert pagination.total == 2
+    assert len(pagination.items) == 2
+    assert set(pagination.items) == {seeded_test_db['user1_cat1'], seeded_test_db['user1_cat2']}
+
+def test_get_all_tags(seeded_test_db):
+    """
+    GIVEN a valid user id
+    WHEN the get_all_tags service is called
+    THEN a pagination object with all tags belonging to that user should be returned
+    """
+    # GIVEN
+    user_id = seeded_test_db['user1'].id
+
+    # WHEN
+    pagination = expense_service.get_all_tags(user_id=user_id, page=1, per_page=10)
+
+    # THEN
+    assert pagination.total == 3
+    assert len(pagination.items) == 3
+    assert set(pagination.items) == {seeded_test_db['user1_tag1'], seeded_test_db['user1_tag2'], seeded_test_db['user1_tag3']}
+
+
+def test_get_expense_by_id_success(seeded_test_db):
+    """
+    GIVEN a user with an expense
+    WHEN the get_expense_by_id service is called with the correct user and expense ID
+    THEN it should return the correct Expense object
+    """
+    # GIVEN
+    user1 = seeded_test_db['user1']
+    expense1 = seeded_test_db['user1_expense1']
+
+    # WHEN
+    retrieved_expense = expense_service.get_expense_by_id(user_id=user1.id, expense_id=expense1.id)
+
+    # THEN
+    assert retrieved_expense == expense1
+
+def test_get_expense_by_id_not_found(seeded_test_db):
+    """
+    GIVEN a user
+    WHEN the get_expense_by_id service is called with an invalid expense ID
+    THEN a NotFoundError should be raised
+    """
+    # GIVEN
+    user1 = seeded_test_db['user1']
+    invalid_expense_id = 999  # An ID that does not exist
+
+    # WHEN / THEN
+    with pytest.raises(NotFoundError):
+        expense_service.get_expense_by_id(user_id=user1.id, expense_id=invalid_expense_id)
+
 def test_get_expense_by_id_permission_denied(seeded_test_db):
     """
     GIVEN two users, where user A creates an expense
@@ -22,32 +132,6 @@ def test_get_expense_by_id_permission_denied(seeded_test_db):
     with pytest.raises(NotFoundError):
         expense_service.get_expense_by_id(user_id=user_b.id, expense_id=expense_a.id)
 
-#todo: get_all_expenses test
-
-def test_get_all_categories(seeded_test_db):
-    """
-    GIVEN a valid user id
-    WHEN the get_all_categories service is called
-    THEN a list of all categories belonging to that user should be returned
-    """
-    user_id = seeded_test_db['user1'].id
-    categories = expense_service.get_all_categories(user_id)
-    assert len(categories) == 2
-    assert seeded_test_db['user1_cat1'] in categories
-    assert seeded_test_db['user1_cat2'] in categories
-
-def test_get_all_tags(seeded_test_db):
-    """
-    GIVEN a valid user id
-    WHEN the get_all_tags service is called
-    THEN a list of all tags belonging to that user should be returned
-    """
-    user_id = seeded_test_db['user1'].id
-    tags = expense_service.get_all_tags(user_id)
-    assert len(tags) == 2
-    assert seeded_test_db['user1_tag1'] in tags
-    assert seeded_test_db['user1_tag2'] in tags
-
 def test_get_category_by_id_success(seeded_test_db):
     """
     GIVEN a valid user id and category id belonging to that user
@@ -58,7 +142,7 @@ def test_get_category_by_id_success(seeded_test_db):
     category = expense_service.get_category_by_id(user_id, seeded_test_db['user1_cat1'].id)
     assert category == seeded_test_db['user1_cat1']
 
-def test_get_category_by_id_not_found(seeded_test_db):
+def test_get_category_by_id_permission_denied(seeded_test_db):
     """
     GIVEN a user id and category id that does not belong to that user
     WHEN the get_category_by_id service is called
@@ -68,27 +152,55 @@ def test_get_category_by_id_not_found(seeded_test_db):
     with pytest.raises(NotFoundError):
         category = expense_service.get_category_by_id(user_id, seeded_test_db['user1_cat1'].id)
 
-def test_get_tags_by_id_success(seeded_test_db):
+def test_get_tag_by_id_success(seeded_test_db):
     """
-    GIVEN a user id and set of tags that belong to that user
-    WHEN the get_tags_by_id service is called
-    THEN a list of corresponding tags should be returned
+    GIVEN a valid user id and tag id belonging to that user
+    WHEN the get_tag_by_id service is called
+    THEN the corresponding tag should be returned
     """
     user_id = seeded_test_db['user1'].id
-    tags = expense_service.get_tags_by_id(user_id, {seeded_test_db['user1_tag1'].id, seeded_test_db['user1_tag2'].id})
-    assert len(tags) == 2
-    assert tags == [seeded_test_db['user1_tag1'], seeded_test_db['user1_tag2']]
+    tag = expense_service.get_tag_by_id(user_id, seeded_test_db['user1_tag1'].id)
+    assert tag == seeded_test_db['user1_tag1']
 
-def test_get_tags_by_id_not_found(seeded_test_db):
+def test_get_tag_by_id_permission_denied(seeded_test_db):
+    """
+    GIVEN a user id and tag id that does not belong to that user
+    WHEN the get_tag_by_id service is called
+    THEN a NotFoundError should be raised
+    """
+    user_id = seeded_test_db['user2'].id
+    with pytest.raises(NotFoundError):
+        tag = expense_service.get_tag_by_id(user_id, seeded_test_db['user1_tag1'].id)
+
+
+def test_get_tags_by_ids_success(seeded_test_db):
+    """
+    GIVEN a valid user id and set of valid tags belonging to the user
+    WHEN the get_list_of_tags service is called
+    THEN a pagination object with the corresponding tags should be returned
+    """
+    user_id = seeded_test_db['user1'].id
+    tags_ids = {seeded_test_db['user1_tag1'].id, seeded_test_db['user1_tag2'].id}
+    expected_tags = {seeded_test_db['user1_tag1'], seeded_test_db['user1_tag2']}
+
+    # WHEN
+    tags = expense_service.get_tags_by_ids(user_id=user_id, tag_ids=tags_ids)
+
+    # THEN
+    assert len(tags) == 2
+    assert set(tags) == expected_tags
+
+def test_get_list_of_tags_not_found(seeded_test_db):
     """
     GIVEN a user id and set of tags where one or is invalid
-    WHEN the get_tags_by_id service is called
+    WHEN the get_list_of_tags service is called
     THEN a NotFoundError should be raised
     """
     user_id = seeded_test_db['user1'].id
     with pytest.raises(NotFoundError):
-        tags = expense_service.get_tags_by_id(user_id,
-                                              {seeded_test_db['user1_tag1'].id, seeded_test_db['user2_tag1'].id})
+        expense_service.get_tags_by_ids(user_id,
+                                        {seeded_test_db['user1_tag1'].id, seeded_test_db['user2_tag1'].id})
+
 
 def test_create_expense_success(test_db):
     """
@@ -200,7 +312,7 @@ def test_create_expense_with_tags_success(test_db):
     assert {tag.name for tag in new_expense.tags} == {'project-alpha', 'client-acme'}
     assert Expense.query.count() == 1
 
-@patch('services.expense_service.get_tags_by_id')
+@patch('services.expense_service.get_tags_by_ids')
 @patch('services.expense_service.get_category_by_id')
 @patch('services.expense_service.db.session')
 def test_create_expense_handles_category_not_found(mock_db_session, mock_get_category_by_id, mock_get_tags_by_id):
@@ -232,7 +344,7 @@ def test_create_expense_handles_category_not_found(mock_db_session, mock_get_cat
     mock_db_session.commit.assert_not_called()
 
 
-@patch('services.expense_service.get_tags_by_id')
+@patch('services.expense_service.get_tags_by_ids')
 @patch('services.expense_service.get_category_by_id')
 @patch('services.expense_service.db.session')
 def test_create_expense_handles_tags_invalid(mock_db_session, mock_get_category_by_id, mock_get_tags_by_id):
@@ -301,8 +413,7 @@ def test_update_expense_one_field_success(seeded_test_db, field_to_update, new_v
 
     # THEN
     if field_to_update == 'tag_ids':
-        expected_value = sorted(list(new_value))
-        assert [tag.id for tag in getattr(updated_expense, 'tags')] == expected_value
+        assert {tag.id for tag in getattr(updated_expense, 'tags')} == new_value
     else:
         expected_value = new_value
         assert getattr(updated_expense, field_to_update) == expected_value
