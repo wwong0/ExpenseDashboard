@@ -4,7 +4,6 @@ import datetime
 from unittest.mock import patch, MagicMock
 
 from services import expense_service, NotFoundError
-from tests.conftest import seeded_test_db
 from validation_schemas.schemas import CreateExpenseSchema, UpdateExpenseSchema
 from models import User, Expense, Category, Tag
 

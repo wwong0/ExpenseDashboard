@@ -10,6 +10,15 @@ from services import expense_service
 expense_bp = Blueprint('expenses', __name__)
 
 def pagination_to_response_data(pag, schema) -> dict:
+    """Converts a Flask-SQLAlchemy Pagination object into a standardized dictionary format.
+
+    Args:
+        pag: The Pagination object returned by Flask-SQLAlchemy.
+        schema: The Pydantic schema to use for serializing each item in the pagination.
+
+    Returns:
+        A dictionary containing the serialized items and pagination metadata.
+    """
     item_data = [schema.model_validate(e).model_dump() for e in pag.items]
 
     response_data = {
@@ -111,6 +120,7 @@ def get_tags():
 
 
     if tag_ids_str:
+        #unpaginated multiple tags with ?tag_ids=1,2,3
         try:
             tag_ids = {int(id_str) for id_str in tag_ids_str.split(',')}
         except ValueError as e:
@@ -119,6 +129,7 @@ def get_tags():
         response_data = [TagResponseSchema.model_validate(t).model_dump() for t in tags]
         return jsonify(response_data), 200
     else:
+        #all tags
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
         pagination = expense_service.get_all_tags(user_id=user_id, page=page, per_page=per_page)

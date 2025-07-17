@@ -43,11 +43,15 @@ class TagResponseSchema(BaseModel):
     id: int
     name: str
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class CategoryResponseSchema(BaseModel):
     """Schema for serializing Category model data."""
     id: int
     name: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ExpenseResponseSchema(BaseModel):
