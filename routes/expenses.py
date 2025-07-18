@@ -4,7 +4,7 @@ from flask_pydantic import validate
 
 
 from validation_schemas.schemas import CreateExpenseSchema, UpdateExpenseSchema, ExpenseResponseSchema, \
-    CategoryResponseSchema, TagResponseSchema
+    CategoryResponseSchema, TagResponseSchema, TagLookupSchema
 from services import expense_service
 
 expense_bp = Blueprint('expenses', __name__)
@@ -107,34 +107,52 @@ def get_category(category_id: int):
     response_data = CategoryResponseSchema.model_validate(category)
     return response_data.model_dump(), 200
 
+
 @expense_bp.route('/tags', methods=['GET'])
 @jwt_required()
-def get_tags():
-    """Retrieves all expense tags for the authenticated user.
+def get_all_tags():
+    """
+    Retrieves a paginated list of all expense tags for the authenticated user.
+
+    This endpoint supports pagination via 'page' and 'per_page' query params.
+    Example: GET /api/tags?page=1&per_page=10
 
     Returns:
-        A JSON object of the user's tags and pagination metadata.
+        A JSON object containing the list of tags and pagination metadata.
     """
     user_id = get_jwt_identity()
-    tag_ids_str = request.args.get('ids')
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+
+    pagination = expense_service.get_all_tags(user_id=user_id, page=page, per_page=per_page)
+
+    response_data = pagination_to_response_data(pagination, TagResponseSchema)
+    return jsonify(response_data), 200
 
 
-    if tag_ids_str:
-        #unpaginated multiple tags with ?tag_ids=1,2,3
-        try:
-            tag_ids = {int(id_str) for id_str in tag_ids_str.split(',')}
-        except ValueError as e:
-            return jsonify({"error": "Invalid tag IDs format. Must be a comma-separated list of integers."}), 400
-        tags = expense_service.get_tags_by_ids(user_id=user_id, tag_ids=tag_ids)
-        response_data = [TagResponseSchema.model_validate(t).model_dump() for t in tags]
-        return jsonify(response_data), 200
-    else:
-        #all tags
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-        pagination = expense_service.get_all_tags(user_id=user_id, page=page, per_page=per_page)
-        response_data = pagination_to_response_data(pagination, TagResponseSchema)
-        return jsonify(response_data), 200
+@expense_bp.route('/tags/lookup', methods=['POST'])
+@jwt_required()
+@validate()
+def lookup_tags(body: TagLookupSchema):
+    """
+    Retrieves a specific set of tags by their IDs.
+
+    This is useful for fetching multiple known resources in a single request.
+    The response is an unpaginated list of the found tags.
+
+    Args:
+        body: A JSON object with a "tag_ids" key containing a list of integers.
+              Example: { "tag_ids": [1, 5, 12] }
+
+    Returns:
+        A JSON array of the requested tag objects.
+    """
+    user_id = get_jwt_identity()
+
+    tags = expense_service.get_tags_by_ids(user_id=user_id, tag_ids=body.tag_ids)
+
+    response_data = [TagResponseSchema.model_validate(t).model_dump() for t in tags]
+    return jsonify(response_data), 200
 
 
 @expense_bp.route('/tags/<int:tag_id>', methods=['GET'])

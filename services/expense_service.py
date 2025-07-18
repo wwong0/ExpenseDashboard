@@ -221,13 +221,18 @@ def update_expense(user_id: int, expense_id: int, data: UpdateExpenseSchema) -> 
     return expense
 
 
-def delete_expense(user_id: int, expense_id: int) -> None:
+def delete_expense(user_id: int, expense_id: int) -> bool:
     """Deletes an expense record from the database.
 
     Args:
         user_id: The ID of the user owning the expense.
         expense_id: The ID of the expense to delete.
+
+    Returns:
+        True if the expense was successfully deleted.
     """
     expense = get_expense_by_id(user_id, expense_id)
     db.session.delete(expense)
     db.session.commit()
+
+    return True

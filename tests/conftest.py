@@ -1,6 +1,7 @@
 import pytest
 import datetime
 from flask_jwt_extended import create_access_token
+from unittest.mock import MagicMock
 
 from app import create_app
 from config import TestConfig
@@ -197,3 +198,32 @@ def auth_headers(client):
         })
         assert response.status_code == 200
         return response.get_json()['access_token']
+
+@pytest.fixture(scope = 'function')
+def mocked_db_objects():
+    mocked_category = MagicMock()
+    mocked_category.id = 5
+    mocked_category.name = 'mocked category'
+
+    mocked_tag1 = MagicMock()
+    mocked_tag2 = MagicMock()
+    mocked_tag1.id = 10
+    mocked_tag2.id = 20
+    mocked_tag1.name = 'mocked tag1'
+    mocked_tag2.name = 'mocked tag2'
+
+    mocked_expense = MagicMock()
+    mocked_expense.id = 101
+    mocked_expense.name = 'mocked expense'
+    mocked_expense.description = None
+    mocked_expense.date = datetime.date(2025, 7, 7)
+    mocked_expense.active_status = True
+    mocked_expense.category = mocked_category
+    mocked_expense.tags = [mocked_tag1, mocked_tag2]
+
+    yield {
+        'mocked_expense' : mocked_expense,
+        'mocked_category' : mocked_category,
+        'mocked_tag1' : mocked_tag1,
+        'mocked_tag2' : mocked_tag2
+    }

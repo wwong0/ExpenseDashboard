@@ -1,14 +1,18 @@
+from unittest.mock import patch, MagicMock
+
 import pytest
 from flask import jsonify
 from flask_jwt_extended import create_access_token
-from datetime import datetime
+import datetime
+
 
 from routes.expenses import pagination_to_response_data
 from models import Category, Expense
-from validation_schemas.schemas import CategoryResponseSchema, ExpenseResponseSchema
+from validation_schemas.schemas import CategoryResponseSchema, ExpenseResponseSchema, TagResponseSchema
+
 
 def convert_json_date_to_datetime(date_str : str) -> datetime.date:
-    return datetime.strptime(date_str, '%a, %d %b %Y %H:%M:%S %Z').date()
+    return datetime.datetime.strptime(date_str, '%a, %d %b %Y %H:%M:%S %Z').date()
 
 def test_pagination_to_response_data(seeded_test_db):
     """
@@ -130,7 +134,11 @@ def test_get_all_categories(client, auth_headers_user1, seeded_test_db):
     assert actual_categories == expected_categories
 
 def test_get_category(client, auth_headers_user1, seeded_test_db):
-
+    """
+    GIVEN a logged-in user with an existing category with id <category_id>
+    WHEN a GET request is made to /api/categories/<category_id>
+    THEN it should return a 200 OK status with the user's category with id <category_id>
+    """
     #GIVEN
     cat1 = seeded_test_db['user1_cat1']
     expected_category = CategoryResponseSchema.model_validate(cat1).model_dump()
@@ -143,7 +151,139 @@ def test_get_category(client, auth_headers_user1, seeded_test_db):
     json_data = response.get_json()
     assert json_data == expected_category
 
+def test_get_all_tags(client, auth_headers_user1, seeded_test_db):
+    """
+    GIVEN a logged-in user with existing tags
+    WHEN a GET request is made to /api/tags
+    THEN it should return a 200 OK status with the user's paginated tags
+    """
+    #GIVEN
+    tag1 = seeded_test_db['user1_tag1']
+    tag2 = seeded_test_db['user1_tag2']
+    tag3 = seeded_test_db['user1_tag3']
+    expected_tags = {tag1.id: TagResponseSchema.model_validate(tag1).model_dump(),
+                     tag2.id: TagResponseSchema.model_validate(tag2).model_dump(),
+                     tag3.id: TagResponseSchema.model_validate(tag3).model_dump()}
 
+    #WHEN
+    response = client.get('/api/tags', headers=auth_headers_user1)
 
+    #THEN
+    assert response.status_code == 200
+    json_data = response.get_json()
+    assert json_data['total'] == 3
+    actual_tags = {item['id']: item for item in json_data['items']}
+    assert actual_tags == expected_tags
 
+def test_get_tag(client, auth_headers_user1, seeded_test_db):
+    """
+    GIVEN a logged-in user with an existing tag with id <tag_id>
+    WHEN a GET request is made to /api/tags/<tag_id>
+    THEN it should return a 200 OK status with the user's tag with id <tag_id>
+    """
+    #GIVEN
+    tag1 = seeded_test_db['user1_tag1']
+    expected_tag = TagResponseSchema.model_validate(tag1).model_dump()
+
+    #WHEN
+    response = client.get(f'/api/tags/{tag1.id}', headers=auth_headers_user1)
+
+    #THEN
+    assert response.status_code == 200
+    json_data = response.get_json()
+    assert json_data == expected_tag
+
+def test_lookup_tags_success(client, auth_headers_user1, seeded_test_db):
+    """
+    GIVEN a logged-in user and a list of valid tag IDs
+    WHEN a POST request is made to /api/tags/lookup with a list of tag_ids
+    THEN it should return a 200 OK status with the requested tags
+    """
+    #GIVEN
+    tag1 = seeded_test_db['user1_tag1']
+    tag3 = seeded_test_db['user1_tag3']
+    expected_tags = sorted([tag1,tag3], key = lambda x: x.id)
+    expected_tags = [TagResponseSchema.model_validate(t).model_dump() for t in expected_tags]
+
+    #WHEN
+    response = client.post('/api/tags/lookup', headers=auth_headers_user1, json ={
+        "tag_ids": [tag1.id, tag3.id]
+    })
+
+    #THEN
+    assert response.status_code == 200
+    json_data = response.get_json()
+    assert json_data == expected_tags
+
+@patch('routes.expenses.expense_service.create_expense')
+@patch('routes.expenses.get_jwt_identity', return_value = 123)
+def test_create_expense_success(mock_get_jwt_identity, mock_create_expense, client, mocked_db_objects):
+    """
+   GIVEN a request to create an expense
+   WHEN the service layer successfully creates the expense
+   THEN the route should return a 201 status and the serialized expense data.
+   """
+    #GIVEN
+    request_data = {
+        'name' : 'test expense',
+        'amount' : 0,
+    }
+
+    mock_create_expense.return_value = mocked_db_objects['mocked_expense']
+    expected_response_data = ExpenseResponseSchema.model_validate(mocked_db_objects['mocked_expense']).model_dump()
+
+    #WHEN
+    access_token = create_access_token(identity='123')
+    response = client.post(
+        '/api/expenses',
+        headers={"Authorization": f"Bearer {access_token}"},
+        json=request_data
+    )
+
+    #THEN
+    assert response.status_code == 201
+    json_data = response.get_json()
+    json_data['date'] = convert_json_date_to_datetime(json_data['date'])
+    assert json_data == expected_response_data
+
+@patch('routes.expenses.expense_service.update_expense')
+@patch('routes.expenses.get_jwt_identity', return_value = 123)
+def test_update_expense(mock_get_jwt_identity, mock_update_expense, client, mocked_db_objects):
+
+    #GIVEN
+    request_data = {}
+    mock_update_expense.return_value = mocked_db_objects['mocked_expense']
+    expected_response_data = ExpenseResponseSchema.model_validate(mocked_db_objects['mocked_expense']).model_dump()
+
+    # WHEN
+    access_token = create_access_token(identity='123')
+    response = client.put(
+        f'/api/expenses/{mocked_db_objects["mocked_expense"].id}',
+        headers={"Authorization": f"Bearer {access_token}"},
+        json=request_data
+    )
+
+    # THEN
+    assert response.status_code == 200
+    json_data = response.get_json()
+    json_data['date'] = convert_json_date_to_datetime(json_data['date'])
+    assert json_data == expected_response_data
+
+@patch('routes.expenses.expense_service.delete_expense')
+@patch('routes.expenses.get_jwt_identity', return_value = 123)
+def test_delete_expense(mock_get_jwt_identity, mock_delete_expense, client, mocked_db_objects):
+
+    #GIVEN
+    expense_id = mocked_db_objects['mocked_expense'].id
+    mock_delete_expense.return_value = True
+
+    #WHEN
+    access_token = create_access_token(identity='123')
+    response = client.delete(
+        f'/api/expenses/{expense_id}',
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    # THEN
+    assert response.status_code == 204
 

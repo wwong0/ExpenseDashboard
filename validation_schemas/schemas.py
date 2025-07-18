@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import List, Optional
+from typing import List, Optional, Set
 import datetime
 
 # --- Input Schemas ---
@@ -27,6 +27,9 @@ class UpdateExpenseSchema(BaseModel):
     active_status: Optional[bool] = None
     date: Optional[datetime.date] = None
     tag_ids: Optional[set[int]] = None
+
+class TagLookupSchema(BaseModel):
+    tag_ids: Set[int]
 
 
 class AuthSchema(BaseModel):
