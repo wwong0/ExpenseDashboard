@@ -1,7 +1,4 @@
-from unittest.mock import patch, MagicMock
-
-import pytest
-from flask import jsonify
+from unittest.mock import patch
 from flask_jwt_extended import create_access_token
 import datetime
 
@@ -11,8 +8,20 @@ from models import Category, Expense
 from validation_schemas.schemas import CategoryResponseSchema, ExpenseResponseSchema, TagResponseSchema
 
 
+def create_auth_headers_for_id(identity: int | str) -> dict:
+    """
+    Creates a JWT authorization header for a given identity.
+    """
+    access_token = create_access_token(identity=str(identity))
+    return {'Authorization': f'Bearer {access_token}'}
+
 def convert_json_date_to_datetime(date_str : str) -> datetime.date:
     return datetime.datetime.strptime(date_str, '%a, %d %b %Y %H:%M:%S %Z').date()
+
+def assert_expense_dicts_equal(actual: dict, expected: dict):
+    """Helper to compare two expense dictionaries, handling date conversion."""
+    actual['date'] = convert_json_date_to_datetime(actual['date'])
+    assert actual == expected
 
 def test_pagination_to_response_data(seeded_test_db):
     """
@@ -69,7 +78,6 @@ def test_get_all_expenses_success(client, auth_headers_user1, seeded_test_db):
         user1_expense1.id: ExpenseResponseSchema.model_validate(user1_expense1).model_dump(),
         user1_expense2.id: ExpenseResponseSchema.model_validate(user1_expense2).model_dump()
     }
-    expected_dates = {expense_id: expected_expenses[expense_id].pop('date') for expense_id in expected_expenses}
 
     # WHEN
     response = client.get('/api/expenses', headers=auth_headers_user1)
@@ -82,10 +90,8 @@ def test_get_all_expenses_success(client, auth_headers_user1, seeded_test_db):
     retrieved_expenses = {item['id']: item for item in json_data['items']}
     assert len(retrieved_expenses) == 2
 
-    actual_dates = {expense_id: convert_json_date_to_datetime(retrieved_expenses[expense_id].pop('date')) for expense_id in retrieved_expenses}
-    assert retrieved_expenses[user1_expense1.id] == expected_expenses[user1_expense1.id]
-    assert retrieved_expenses[user1_expense2.id] == expected_expenses[user1_expense2.id]
-    assert expected_dates == actual_dates
+    assert_expense_dicts_equal(retrieved_expenses[user1_expense1.id], expected_expenses[user1_expense1.id])
+    assert_expense_dicts_equal(retrieved_expenses[user1_expense2.id], expected_expenses[user1_expense2.id])
 
 def test_get_expense(client, auth_headers_user1, seeded_test_db):
     """
@@ -104,12 +110,7 @@ def test_get_expense(client, auth_headers_user1, seeded_test_db):
     assert response.status_code == 200
     json_data = response.get_json()
 
-    actual_date_str = json_data.pop('date')
-    expected_date_obj = expected_expense.pop('date')
-
-    assert expected_expense == json_data
-    actual_date_obj = convert_json_date_to_datetime(actual_date_str)
-    assert actual_date_obj == expected_date_obj
+    assert_expense_dicts_equal(json_data, expected_expense)
 
 def test_get_all_categories(client, auth_headers_user1, seeded_test_db):
     """
@@ -233,18 +234,16 @@ def test_create_expense_success(mock_get_jwt_identity, mock_create_expense, clie
     expected_response_data = ExpenseResponseSchema.model_validate(mocked_db_objects['mocked_expense']).model_dump()
 
     #WHEN
-    access_token = create_access_token(identity='123')
     response = client.post(
         '/api/expenses',
-        headers={"Authorization": f"Bearer {access_token}"},
+        headers=create_auth_headers_for_id(123),
         json=request_data
     )
 
     #THEN
     assert response.status_code == 201
     json_data = response.get_json()
-    json_data['date'] = convert_json_date_to_datetime(json_data['date'])
-    assert json_data == expected_response_data
+    assert_expense_dicts_equal(json_data, expected_response_data)
 
 @patch('routes.expenses.expense_service.update_expense')
 @patch('routes.expenses.get_jwt_identity', return_value = 123)
@@ -256,18 +255,17 @@ def test_update_expense(mock_get_jwt_identity, mock_update_expense, client, mock
     expected_response_data = ExpenseResponseSchema.model_validate(mocked_db_objects['mocked_expense']).model_dump()
 
     # WHEN
-    access_token = create_access_token(identity='123')
     response = client.put(
         f'/api/expenses/{mocked_db_objects["mocked_expense"].id}',
-        headers={"Authorization": f"Bearer {access_token}"},
+        headers=create_auth_headers_for_id(123),
         json=request_data
     )
 
     # THEN
     assert response.status_code == 200
     json_data = response.get_json()
-    json_data['date'] = convert_json_date_to_datetime(json_data['date'])
-    assert json_data == expected_response_data
+    assert_expense_dicts_equal(json_data, expected_response_data)
+
 
 @patch('routes.expenses.expense_service.delete_expense')
 @patch('routes.expenses.get_jwt_identity', return_value = 123)
@@ -278,10 +276,9 @@ def test_delete_expense(mock_get_jwt_identity, mock_delete_expense, client, mock
     mock_delete_expense.return_value = True
 
     #WHEN
-    access_token = create_access_token(identity='123')
     response = client.delete(
         f'/api/expenses/{expense_id}',
-        headers={"Authorization": f"Bearer {access_token}"},
+        headers=create_auth_headers_for_id(123),
     )
 
     # THEN

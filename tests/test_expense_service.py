@@ -161,7 +161,7 @@ def test_get_tag_by_id_success(seeded_test_db):
     tag = expense_service.get_tag_by_id(user_id, seeded_test_db['user1_tag1'].id)
     assert tag == seeded_test_db['user1_tag1']
 
-def test_get_tag_by_id_permission_denied(seeded_test_db):
+def test_get_tags_by_ids_raises_not_found_for_mismatched_user(seeded_test_db):
     """
     GIVEN a user id and tag id that does not belong to that user
     WHEN the get_tag_by_id service is called

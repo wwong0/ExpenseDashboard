@@ -140,6 +140,7 @@ def seeded_test_db(test_db):
         'user3' : user3
     }
 
+
 @pytest.fixture(scope='function')
 def auth_headers_user1(seeded_test_db):
     """
@@ -181,23 +182,6 @@ def client(test_app):
     This allows tests to simulate HTTP requests to the application.
     """
     return test_app.test_client()
-
-
-@pytest.fixture(scope='function')
-def auth_headers(client):
-    """
-    Pytest fixture to handle user login and provide JWT auth headers.
-    This simplifies testing protected endpoints by abstracting away the
-    login process. It returns a dictionary containing headers for two users.
-    """
-    # Helper function to log in a user and get their token
-    def get_token(username, password):
-        response = client.post('/auth/login', json={
-            'username': username,
-            'password': 'password' # Assuming a known password for test users
-        })
-        assert response.status_code == 200
-        return response.get_json()['access_token']
 
 @pytest.fixture(scope = 'function')
 def mocked_db_objects():
