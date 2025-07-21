@@ -239,6 +239,8 @@ def test_create_expense_success(test_db):
     assert new_expense.date == datetime.date(2025, 7, 1)
     assert new_expense.description == "Lunch"
     assert new_expense.active_status == True
+    assert new_expense.merchant is None
+
     assert new_expense.category.name == 'Food'
     assert new_expense.category_id == cat.id
     assert len(new_expense.tags) == 0
@@ -273,6 +275,7 @@ def test_create_expense_with_optional_fields_omitted_success(test_db):
     assert new_expense.description is None
     assert new_expense.category_id is None
     assert new_expense.active_status is True
+    assert new_expense.merchant is None
     assert new_expense.date == datetime.date(2025, 7, 12)
     assert len(new_expense.tags) == 0
     assert Expense.query.count() == 1

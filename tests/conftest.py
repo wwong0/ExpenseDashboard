@@ -73,7 +73,8 @@ def seeded_test_db(test_db):
         date=datetime.date(2025, 7, 7),
         active_status=True,
         category_id=user1_cat1.id,
-        tag_ids={user1_tag1.id}
+        tag_ids={user1_tag1.id},
+        merchant = 'Costco'
     )
 
     user1_expense1 = create_expense(user_id=user1.id, data=user1_expense1_data)
@@ -85,7 +86,8 @@ def seeded_test_db(test_db):
         date = datetime.date(2025, 7, 7),
         active_status = True,
         category_id=user1_cat2.id,
-        tag_ids={user1_tag1.id, user1_tag2.id}
+        tag_ids={user1_tag1.id, user1_tag2.id},
+        merchant = None
     )
 
     user1_expense2 = create_expense(user_id=user1.id, data=user1_expense2_data)
@@ -111,7 +113,8 @@ def seeded_test_db(test_db):
         date = datetime.date(2025, 7, 7),
         active_status = True,
         category_id=user2_cat1.id,
-        tag_ids={user2_tag1.id}
+        tag_ids={user2_tag1.id},
+        merchant= 'Burger King'
     )
     user2_expense1 = create_expense(user_id=user2.id, data=user2_expense1_data)
 
@@ -204,6 +207,7 @@ def mocked_db_objects():
     mocked_expense.active_status = True
     mocked_expense.category = mocked_category
     mocked_expense.tags = [mocked_tag1, mocked_tag2]
+    mocked_expense.merchant = 'mocked merchant'
 
     yield {
         'mocked_expense' : mocked_expense,

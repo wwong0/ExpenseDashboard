@@ -90,6 +90,59 @@ def get_category_by_id(user_id: int, category_id: int) -> Category | None:
         raise NotFoundError(f'Category with id {category_id} not found')
     return category
 
+def create_category(user_id: int, name: str):
+    """Creates a new category for a user.
+
+    Args:
+        user_id: The ID of the user creating the category.
+        name: The name of the category.
+
+    Returns:
+        The newly created Category object.
+    """
+    new_category = Category(user_id=user_id, name=name)
+    db.session.add(new_category)
+    db.session.commit()
+
+    return new_category
+
+def update_category(user_id: int, category_id: int, name: str):
+    """Updates an existing category.
+
+    Args:
+        user_id: The ID of the user who owns the category.
+        category_id: The ID of the category to update.
+        name: The new name for the category.
+
+    Returns:
+        The updated Category object.
+
+    Raises:
+        NotFoundError: If no category with the given ID is found for the user.
+    """
+    category = get_category_by_id(user_id, category_id)
+    category.name = name
+    db.session.commit()
+    return category
+
+def delete_category(user_id: int, category_id: int) -> bool:
+    """Deletes a category from the database.
+
+    Args:
+        user_id: The ID of the user who owns the category.
+        category_id: The ID of the category to delete.
+
+    Returns:
+        True if the category was successfully deleted.
+
+    Raises:
+        NotFoundError: If no category with the given ID is found for the user.
+    """
+    category = get_category_by_id(user_id, category_id)
+    db.session.delete(category)
+    db.session.commit()
+    return True
+
 def get_all_tags(user_id: int, page: int = 1, per_page: int = 20) -> Pagination:
     """Retrieves all tags for a given user.
 
@@ -119,7 +172,6 @@ def validate_tags(user_id : int, tag_ids : set[int]):
         raise NotFoundError(f"One or more invalid tag ids: {sorted(list(invalid_ids))}")
 
     return fetched_ids
-
 
 def get_tags_by_ids(user_id: int, tag_ids: set[int]) -> list[Tag]:
     """Retrieves a list of tags by their IDs, ensuring they belong to the user.
@@ -163,6 +215,59 @@ def get_tag_by_id(user_id: int, tag_id: int) -> Tag:
         raise NotFoundError(f'Tag with id {tag_id} not found')
     return tag
 
+def create_tag(user_id: int, name: str):
+    """Creates a new tag for a user.
+
+    Args:
+        user_id: The ID of the user creating the tag.
+        name: The name of the tag.
+
+    Returns:
+        The newly created Tag object.
+    """
+    new_tag = Tag(user_id=user_id, name=name)
+    db.session.add(new_tag)
+    db.session.commit()
+
+    return new_tag
+
+def update_tag(user_id: int, tag_id: int, name: str):
+    """Updates an existing tag.
+
+    Args:
+        user_id: The ID of the user who owns the tag.
+        tag_id: The ID of the tag to update.
+        name: The new name for the tag.
+
+    Returns:
+        The updated Tag object.
+
+    Raises:
+        NotFoundError: If no tag with the given ID is found for the user.
+    """
+    tag = get_tag_by_id(user_id, tag_id)
+    tag.name = name
+    db.session.commit()
+    return tag
+
+def delete_tag(user_id: int, tag_id: int) -> bool:
+    """Deletes a tag from the database.
+
+    Args:
+        user_id: The ID of the user who owns the tag.
+        tag_id: The ID of the tag to delete.
+
+    Returns:
+        True if the tag was successfully deleted.
+
+    Raises:
+        NotFoundError: If no tag with the given ID is found for the user.
+    """
+    tag = get_tag_by_id(user_id, tag_id)
+    db.session.delete(tag)
+    db.session.commit()
+    return True
+
 def create_expense(user_id: int, data: CreateExpenseSchema) -> Expense:
     """Creates a new expense record in the database.
 
@@ -183,6 +288,7 @@ def create_expense(user_id: int, data: CreateExpenseSchema) -> Expense:
         description=data.description,
         date=data.date,
         active_status=data.active_status,
+        merchant=data.merchant,
         category=category,
         tags=tags
     )
@@ -236,3 +342,4 @@ def delete_expense(user_id: int, expense_id: int) -> bool:
     db.session.commit()
 
     return True
+
