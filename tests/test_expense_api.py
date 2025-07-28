@@ -1,27 +1,30 @@
 from unittest.mock import patch
 from flask_jwt_extended import create_access_token
 import datetime
-
+import json
 
 from routes.expenses import pagination_to_response_data
 from models import Category, Expense
 from validation_schemas.schemas import CategoryResponseSchema, ExpenseResponseSchema, TagResponseSchema
+from testing_utils import create_auth_headers_for_id
 
-
-def create_auth_headers_for_id(identity: int | str) -> dict:
-    """
-    Creates a JWT authorization header for a given identity.
-    """
-    access_token = create_access_token(identity=str(identity))
-    return {'Authorization': f'Bearer {access_token}'}
-
-def convert_json_date_to_datetime(date_str : str) -> datetime.date:
-    return datetime.datetime.strptime(date_str, '%a, %d %b %Y %H:%M:%S %Z').date()
+def expense_to_json_loaded_validated_response(expense: Expense):
+    return json.loads(ExpenseResponseSchema.model_validate(expense).model_dump_json())
 
 def assert_expense_dicts_equal(actual: dict, expected: dict):
-    """Helper to compare two expense dictionaries, handling date conversion."""
-    actual['date'] = convert_json_date_to_datetime(actual['date'])
-    assert actual == expected
+    """
+    Asserts that two expense dictionaries are equal, handling the
+    Decimal-to-float conversion for the 'amount' field.
+    """
+    actual_copy = actual.copy()
+    expected_copy = expected.copy()
+
+    if 'amount' in actual_copy and 'amount' in expected_copy:
+        # Convert both to float for a consistent comparison
+        actual_copy['amount'] = float(actual_copy['amount'])
+        expected_copy['amount'] = float(expected_copy['amount'])
+
+    assert actual_copy == expected_copy
 
 def test_pagination_to_response_data(seeded_test_db):
     """
@@ -75,8 +78,8 @@ def test_get_all_expenses_success(client, auth_headers_user1, seeded_test_db):
     user1_expense2 = seeded_test_db['user1_expense2']
 
     expected_expenses = {
-        user1_expense1.id: ExpenseResponseSchema.model_validate(user1_expense1).model_dump(),
-        user1_expense2.id: ExpenseResponseSchema.model_validate(user1_expense2).model_dump()
+        user1_expense1.id: expense_to_json_loaded_validated_response(user1_expense1),
+        user1_expense2.id: expense_to_json_loaded_validated_response(user1_expense2)
     }
 
     # WHEN
@@ -101,7 +104,7 @@ def test_get_expense(client, auth_headers_user1, seeded_test_db):
    """
     #GIVEN
     user1_expense1 = seeded_test_db['user1_expense1']
-    expected_expense = ExpenseResponseSchema.model_validate(user1_expense1).model_dump()
+    expected_expense = json.loads(ExpenseResponseSchema.model_validate(user1_expense1).model_dump_json())
 
     #WHEN
     response = client.get(f'/api/expenses/{user1_expense1.id}', headers= auth_headers_user1)
@@ -231,7 +234,7 @@ def test_create_expense_success(mock_get_jwt_identity, mock_create_expense, clie
     }
 
     mock_create_expense.return_value = mocked_db_objects['mocked_expense']
-    expected_response_data = ExpenseResponseSchema.model_validate(mocked_db_objects['mocked_expense']).model_dump()
+    expected_response_data = expense_to_json_loaded_validated_response(mocked_db_objects['mocked_expense'])
 
     #WHEN
     response = client.post(
@@ -252,7 +255,7 @@ def test_update_expense(mock_get_jwt_identity, mock_update_expense, client, mock
     #GIVEN
     request_data = {}
     mock_update_expense.return_value = mocked_db_objects['mocked_expense']
-    expected_response_data = ExpenseResponseSchema.model_validate(mocked_db_objects['mocked_expense']).model_dump()
+    expected_response_data = expense_to_json_loaded_validated_response(mocked_db_objects['mocked_expense'])
 
     # WHEN
     response = client.put(
@@ -283,4 +286,5 @@ def test_delete_expense(mock_get_jwt_identity, mock_delete_expense, client, mock
 
     # THEN
     assert response.status_code == 204
+    mock_delete_expense.assert_called_once_with(user_id=123, expense_id=expense_id)
 

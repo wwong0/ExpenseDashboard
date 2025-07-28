@@ -39,6 +39,41 @@ def get_budget(budget_id: int):
     response_data = BudgetResponseSchema.model_validate(budget)
     return response_data.model_dump(), 200
 
+
+@budget_bp.route('/budgets/summary', methods=['GET'])
+@jwt_required()
+def get_budget_summary_for_month():
+    """
+    Retrieves a structured summary of all budgets for a given month and year.
+    This includes the overall budget (if set) and a list of all
+    categorical budgets.
+
+    Query Params:
+        year (int): The year to retrieve budgets for.
+        month (int): The month (1-12) to retrieve budgets for.
+
+    Returns:
+        A JSON object containing the structured budget summary.
+    """
+    user_id = get_jwt_identity()
+
+    year = request.args.get('year', type=int)
+    month = request.args.get('month', type=int)
+
+    if not year or not month:
+        return jsonify({"error": "Both 'year' and 'month' query parameters are required."}), 400
+
+    if not (1 <= month <= 12):
+        return jsonify({"error": "'month' must be an integer between 1 and 12."}), 400
+
+    budget_summary = budget_service.get_budget_by_year_month(
+        user_id=user_id,
+        year=year,
+        month=month
+    )
+
+    return jsonify(budget_summary), 200
+
 @budget_bp.route('/budgets/<int:budget_id>', methods=['PUT'])
 @jwt_required()
 @validate()

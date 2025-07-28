@@ -2,11 +2,13 @@ import pytest
 import datetime
 from flask_jwt_extended import create_access_token
 from unittest.mock import MagicMock
+from decimal import Decimal
 
 from app import create_app
 from config import TestConfig
 from models import db, User, Expense, Category, Tag
-from validation_schemas.schemas import CreateExpenseSchema
+from services import income_service, budget_service
+from validation_schemas.schemas import CreateExpenseSchema, CreateIncomeSchema, CreateBudgetSchema
 from services.expense_service import create_expense
 
 @pytest.fixture(scope='function')
@@ -68,7 +70,7 @@ def seeded_test_db(test_db):
 
     user1_expense1_data = CreateExpenseSchema(
         name='Milk and Eggs',
-        amount=15.25,
+        amount= 15.25,
         description='Weekly groceries',
         date=datetime.date(2025, 7, 7),
         active_status=True,
@@ -78,6 +80,16 @@ def seeded_test_db(test_db):
     )
 
     user1_expense1 = create_expense(user_id=user1.id, data=user1_expense1_data)
+
+    user1_income1 = income_service.create_income(user_id=user1.id, data=CreateIncomeSchema(
+        source='Paycheck', amount=Decimal('2000.00'), date=datetime.date(2025, 7, 1)
+    ))
+    user1_budget1 = budget_service.create_budget(user_id=user1.id, data=CreateBudgetSchema(
+        amount=Decimal('500.00'), year=2025, month=7, category_id=user1_cat1.id
+    ))
+    user1_budget2 = budget_service.create_budget(user_id=user1.id, data=CreateBudgetSchema(
+        amount=Decimal('3000.00'), year=2025, month=8, category_id=None
+    ))
 
     user1_expense2_data = CreateExpenseSchema(
         name='Electricity Bill',
@@ -135,6 +147,9 @@ def seeded_test_db(test_db):
         "user1_tag3": user1_tag3,
         "user1_expense1": user1_expense1,
         "user1_expense2": user1_expense2,
+        "user1_income1": user1_income1,
+        "user1_budget1": user1_budget1,
+        "user1_budget2": user1_budget2,
         "user2_cat1": user2_cat1,
         "user2_cat2": user2_cat2,
         "user2_tag1": user2_tag1,
@@ -202,6 +217,7 @@ def mocked_db_objects():
     mocked_expense = MagicMock()
     mocked_expense.id = 101
     mocked_expense.name = 'mocked expense'
+    mocked_expense.amount = 100.00
     mocked_expense.description = None
     mocked_expense.date = datetime.date(2025, 7, 7)
     mocked_expense.active_status = True
@@ -215,3 +231,25 @@ def mocked_db_objects():
         'mocked_tag1' : mocked_tag1,
         'mocked_tag2' : mocked_tag2
     }
+
+@pytest.fixture(scope='function')
+def mocked_income_object():
+    """Provides a MagicMock for an Income object."""
+    mocked_income = MagicMock()
+    mocked_income.id = 201
+    mocked_income.source = 'Mocked Source'
+    mocked_income.amount = Decimal('1500.00')
+    mocked_income.date = datetime.date(2025, 1, 1)
+    mocked_income.description = 'Mocked description'
+    return mocked_income
+
+@pytest.fixture(scope='function')
+def mocked_budget_object(mocked_db_objects):
+    """Provides a MagicMock for a Budget object."""
+    mocked_budget = MagicMock()
+    mocked_budget.id = 301
+    mocked_budget.amount = Decimal('1000.00')
+    mocked_budget.year = 2025
+    mocked_budget.month = 1
+    mocked_budget.category = mocked_db_objects['mocked_category']
+    return mocked_budget

@@ -69,7 +69,7 @@ def get_all_categories(user_id: int, page: int = 1, per_page: int = 20) -> Pagin
 
     return query.paginate(page=page, per_page=per_page, error_out=False)
 
-def get_category_by_id(user_id: int, category_id: int) -> Category | None:
+def get_category_by_id(user_id: int, category_id: int | None) -> Category | None:
     """Retrieves a single category by its ID, ensuring it belongs to the user.
 
     Args:
@@ -77,13 +77,13 @@ def get_category_by_id(user_id: int, category_id: int) -> Category | None:
         category_id: The ID of the category to retrieve, or None.
 
     Returns:
-        The Category object if found, otherwise None.
+        The Category object if found, otherwise None if category_id is None.
 
     Raises:
         NotFoundError: If a category_id is provided but no matching category
             is found for the user.
     """
-    if not category_id:
+    if category_id is None:
         return None
     category = Category.query.filter_by(user_id=user_id, id=category_id).first()
     if not category:
